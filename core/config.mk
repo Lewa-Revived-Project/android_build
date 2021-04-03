@@ -1234,10 +1234,10 @@ dont_bother_goals := out \
     product-graph dump-products
 
 ifneq ($(LEWA_BUILD),)
-ifneq ($(wildcard device/lewa/sepolicy/common/sepolicy.mk),)
+ifneq ($(wildcard device/lineage/sepolicy/common/sepolicy.mk),)
 ## We need to be sure the global selinux policies are included
 ## last, to avoid accidental resetting by device configs
-$(eval include device/lewa/sepolicy/common/sepolicy.mk)
+$(eval include device/lineage/sepolicy/common/sepolicy.mk)
 endif
 endif
 
