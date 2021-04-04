@@ -35,6 +35,12 @@ Invoke ". build/envsetup.sh" from your shell to add the following functions to y
 - pathmod:    Get the directory containing a module.
 - refreshmod: Refresh list of modules for allmod/gomod.
 
+EOF
+
+    __print_lineage_functions_help
+
+cat <<EOF
+
 Environment options:
 - SANITIZE_HOST: Set to 'address' to use ASAN for all host modules.
 - ANDROID_QUIET_BUILD: set to 'true' to display only the essential messages.
@@ -44,7 +50,7 @@ EOF
     local T=$(gettop)
     local A=""
     local i
-    for i in `cat $T/build/envsetup.sh | sed -n "/^[[:blank:]]*function /s/function \([a-z_]*\).*/\1/p" | sort | uniq`; do
+    for i in `cat $T/build/envsetup.sh $T/vendor/lewa/build/envsetup.sh | sed -n "/^[[:blank:]]*function /s/function \([a-z_]*\).*/\1/p" | sort | uniq`; do
       A="$A $i"
     done
     echo $A
@@ -55,8 +61,8 @@ function build_build_var_cache()
 {
     local T=$(gettop)
     # Grep out the variable names from the script.
-    cached_vars=(`cat $T/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
-    cached_abs_vars=(`cat $T/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_abs_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
+    cached_vars=(`cat $T/build/envsetup.sh $T/vendor/lewa/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
+    cached_abs_vars=(`cat $T/build/envsetup.sh $T/vendor/lewa/build/envsetup.sh | tr '()' '  ' | awk '{for(i=1;i<=NF;i++) if($i~/get_abs_build_var/) print $(i+1)}' | sort -u | tr '\n' ' '`)
     # Call the build system to dump the "<val>=<value>" pairs as a shell script.
     build_dicts_script=`\builtin cd $T; build/soong/soong_ui.bash --dumpvars-mode \
                         --vars="${cached_vars[*]}" \
@@ -138,8 +144,8 @@ function check_product()
         echo "Couldn't locate the top of the tree.  Try setting TOP." >&2
         return
     fi
-    if (echo -n $1 | grep -q -e "^lewa_") ; then
-        LEWA_BUILD=$(echo -n $1 | sed -e 's/^lewa_//g')
+    if (echo -n $1 | grep -q -e "^lineage_") ; then
+        LEWA_BUILD=$(echo -n $1 | sed -e 's/^lineage_//g')
     else
         LEWA_BUILD=
     fi
@@ -586,17 +592,9 @@ function print_lunch_menu()
     local uname=$(uname)
     local choices=$(TARGET_BUILD_APPS= get_build_var COMMON_LUNCH_CHOICES)
     echo
-
-    echo ""
-    tput setaf 1;
-    tput sgr0;
-    echo ""
-    echo "                      Welcome to the device menu                      "
-    echo ""
-    tput bold;
-    echo "     Below are all the devices currently available to be compiled     "
-    tput sgr0;
-    echo ""
+    echo "You're building on" $uname
+    echo
+    echo "Lunch menu... pick a combo:"
 
     local i=1
     local choice
@@ -617,10 +615,7 @@ function lunch()
         answer=$1
     else
         print_lunch_menu
-        tput setaf 2;
-        tput bold;
-        echo -n "Go ahead and pick a number or enter lunch combo(lewa_device-build_type)... "
-        tput sgr0;
+        echo -n "Which would you like? [aosp_arm-eng] "
         read answer
     fi
 
@@ -661,16 +656,15 @@ function lunch()
 
     if [ -z "$product" ]
     then
-        echo ""
-        echo "Come on man, pay attention to what you're doing"
-        echo ""
+        echo
+        echo "Invalid lunch combo: $selection"
         return 1
     fi
 
     check_product $product
     if [ $? -ne 0 ]
     then
-        # if we can't find a product, try to grab it off the Lewa Revived OS Devices GitHub
+        # if we can't find a product, try to grab it off the LineageOS GitHub
         T=$(gettop)
         cd $T > /dev/null
         vendor/lewa/build/tools/roomservice.py $product
@@ -711,6 +705,8 @@ function lunch()
     export TARGET_BUILD_TYPE=release
 
     echo
+
+    fixup_common_out_dir
 
     set_stuff_for_environment
     printconfig
@@ -1444,18 +1440,6 @@ function _complete_android_module_names() {
     COMPREPLY=( $(allmod | grep -E "^$word") )
 }
 
-# Make using all available CPUs
-function mka() {
-    case `uname -s` in
-        Darwin)
-            make -j `sysctl hw.ncpu|cut -d" " -f2` "$@"
-            ;;
-        *)
-            schedtool -B -n 1 -e ionice -n 1 make -j `cat /proc/cpuinfo | grep "^processor" | wc -l` "$@"
-            ;;
-    esac
-}
-
 # Print colored exit condition
 function pez {
     "$@"
@@ -1658,22 +1642,6 @@ validate_current_shell
 source_vendorsetup
 addcompletions
 
-function repopick() {
-    T=$(gettop)
-    $T/vendor/lewa/build/tools/repopick.py $@
-}
-
-# check and set ccache path on envsetup
-if [ -z ${CCACHE_EXEC} ]; then
-    ccache_path=$(which ccache)
-    if [ ! -z "$ccache_path" ]; then
-	export USE_CCACHE=1
-	export CCACHE_COMPRESS=1
-        export CCACHE_EXEC="$ccache_path"
-	echo -e "\e[1mccache enabled and \e[32m\e[4mCCACHE_EXEC\e[0m \e[1mhas been set to : \e[4m$ccache_path\e[0m"
-    else
-        echo -e "\e[31m\e[1mccache not found/installed!\e[0m"
-    fi
-fi
-
 export ANDROID_BUILD_TOP=$(gettop)
+
+. $ANDROID_BUILD_TOP/vendor/lewa/build/envsetup.sh
